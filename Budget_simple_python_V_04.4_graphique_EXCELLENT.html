@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau de Bord Budget</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen p-6">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-4xl font-bold text-slate-800 mb-8">💰 Tableau de Bord Budget</h1>
+        
+        <!-- Cartes résumé -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
+                <p class="text-sm text-gray-500 mb-1">Revenus Totaux</p>
+                <p id="totalRevenus" class="text-3xl font-bold text-green-600">0.00 €</p>
+            </div>
+            <div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-red-500">
+                <p class="text-sm text-gray-500 mb-1">Dépenses Totales</p>
+                <p id="totalDepenses" class="text-3xl font-bold text-red-600">0.00 €</p>
+            </div>
+            <div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500">
+                <p class="text-sm text-gray-500 mb-1">Solde</p>
+                <p id="solde" class="text-3xl font-bold text-blue-600">0.00 €</p>
+            </div>
+        </div>
+
+        <!-- Formulaire d'ajout -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold text-slate-800 mb-4">Ajouter une transaction</h2>
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <select id="type" class="px-4 py-2 border border-gray-300 rounded-lg">
+                    <option value="depense">Dépense</option>
+                    <option value="revenu">Revenu</option>
+                </select>
+                <input type="number" id="montant" step="0.01" placeholder="Montant (€)" class="px-4 py-2 border border-gray-300 rounded-lg">
+                <select id="categorie" class="px-4 py-2 border border-gray-300 rounded-lg"></select>
+                <input type="text" id="description" placeholder="Description" class="px-4 py-2 border border-gray-300 rounded-lg">
+                <button onclick="ajouterTransaction()" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">➕ Ajouter</button>
+            </div>
+        </div>
+
+        <!-- Solde initial -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold text-slate-800 mb-4">Paramétrer le solde initial</h2>
+            <div class="flex flex-col md:flex-row md:items-center gap-4">
+                <div class="flex-1">
+                    <label for="soldeInitialInput" class="block text-sm text-gray-600 mb-1">Montant de départ du compte</label>
+                    <input type="number" id="soldeInitialInput" step="0.01" class="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Ex. 500">
+                </div>
+                <button onclick="definirSoldeInitial()" class="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700">💼 Mettre à jour</button>
+            </div>
+            <p class="mt-3 text-sm text-gray-600">Solde initial actuel : <span id="soldeInitialAffichage" class="font-semibold text-slate-800">0,00 €</span></p>
+        </div>
+
+        <!-- Import/Export CSV -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold text-slate-800 mb-4">Import / Export</h2>
+            <div class="flex flex-wrap gap-4">
+                <input type="file" id="csvFile" accept=".csv" class="hidden">
+                <button onclick="document.getElementById('csvFile').click()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">📥 Importer Transactions CSV</button>
+                <button onclick="exporterTransactionsCSV()" class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700">📤 Exporter Transactions</button>
+                <button onclick="exporterSauvegardeComplete()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">💾 Sauvegarde Complète</button>
+                <input type="file" id="sauvegardeFile" accept=".json" class="hidden">
+                <button onclick="document.getElementById('sauvegardeFile').click()" class="bg-cyan-600 text-white px-6 py-2 rounded-lg hover:bg-cyan-700">📂 Restaurer Sauvegarde</button>
+                <button onclick="reinitialiser()" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700">🔄 Réinitialiser tout</button>
+            </div>
+            <p class="text-sm text-gray-600 mt-3">💡 La sauvegarde complète inclut : transactions, budgets, catégories personnalisées et solde initial</p>
+        </div>
+
+        <!-- Gestion des catégories -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold text-slate-800 mb-4">Gérer les Catégories</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Catégories de dépenses -->
+                <div>
+                    <h3 class="text-lg font-semibold text-slate-700 mb-3">Catégories de Dépenses</h3>
+                    <div class="flex gap-2 mb-3">
+                        <input type="text" id="nouvelleCategorieDepense" placeholder="Nouvelle catégorie..." class="flex-1 px-4 py-2 border border-gray-300 rounded-lg">
+                        <button onclick="ajouterCategorie('depense')" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">➕</button>
+                    </div>
+                    <div id="listeCategoriesDepense" class="space-y-2"></div>
+                </div>
+                
+                <!-- Catégories de revenus -->
+                <div>
+                    <h3 class="text-lg font-semibold text-slate-700 mb-3">Catégories de Revenus</h3>
+                    <div class="flex gap-2 mb-3">
+                        <input type="text" id="nouvelleCategorieRevenu" placeholder="Nouvelle catégorie..." class="flex-1 px-4 py-2 border border-gray-300 rounded-lg">
+                        <button onclick="ajouterCategorie('revenu')" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">➕</button>
+                    </div>
+                    <div id="listeCategoriesRevenu" class="space-y-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gestion des Budgets -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-slate-800">💰 Gestion des Budgets Mensuels</h2>
+                <button onclick="afficherBudgets()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                    🔄 Actualiser
+                </button>
+            </div>
+            
+            <!-- Ajouter un budget -->
+            <div class="mb-6 p-4 bg-blue-50 rounded-lg">
+                <h3 class="text-lg font-semibold text-slate-700 mb-3">Définir un Budget</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <select id="budgetCategorie" class="px-4 py-2 border border-gray-300 rounded-lg">
+                        <option value="">Sélectionner une catégorie</option>
+                    </select>
+                    <input type="number" id="budgetMontant" step="0.01" placeholder="Montant mensuel (€)" class="px-4 py-2 border border-gray-300 rounded-lg">
+                    <button onclick="definirBudget()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">📊 Définir Budget</button>
+                </div>
+            </div>
+
+            <!-- Tableau des budgets -->
+            <div id="tableBudgets"></div>
+        </div>
+
+        <!-- Graphiques -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-xl font-bold text-slate-800 mb-4">Dépenses par Catégorie</h2>
+                <canvas id="pieChart"></canvas>
+            </div>
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-xl font-bold text-slate-800 mb-4">Évolution Mensuelle</h2>
+                <canvas id="lineChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Liste des transactions -->
+        <div class="bg-white rounded-xl shadow-lg p-6">
+            <h2 class="text-xl font-bold text-slate-800 mb-4">Transactions Récentes</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b">
+                            <th class="text-left py-3 px-4">Date</th>
+                            <th class="text-left py-3 px-4">Type</th>
+                            <th class="text-left py-3 px-4">Catégorie</th>
+                            <th class="text-left py-3 px-4">Description</th>
+                            <th class="text-right py-3 px-4">Montant</th>
+                            <th class="text-center py-3 px-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionsList"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let transactions = [
+            { id: 1, type: 'revenu', montant: 3000, categorie: 'Salaire', date: '2025-09-01', description: 'Salaire mensuel' },
+            { id: 2, type: 'depense', montant: 800, categorie: 'Logement', date: '2025-09-05', description: 'Loyer' },
+            { id: 3, type: 'depense', montant: 250, categorie: 'Alimentation', date: '2025-09-10', description: 'Courses' },
+            { id: 4, type: 'depense', montant: 100, categorie: 'Transport', date: '2025-09-12', description: 'Essence' },
+            { id: 5, type: 'depense', montant: 150, categorie: 'Loisirs', date: '2025-09-15', description: 'Restaurant' }
+        ];
+
+        const categoriesDefaut = {
+            depense: ['Alimentation', 'Logement', 'Transport', 'Loisirs', 'Santé', 'Shopping', 'Factures', 'Autre'],
+            revenu: ['Salaire', 'Freelance', 'Investissements', 'Prime', 'Autre']
+        };
+
+        let categories = {
+            depense: [...categoriesDefaut.depense],
+            revenu: [...categoriesDefaut.revenu]
+        };
+
+        let budgets = {};
+        let soldeInitial = 0;
+
+        let pieChart, lineChart;
+
+        function updateCategories() {
+            const type = document.getElementById('type').value;
+            const categorieSelect = document.getElementById('categorie');
+            categorieSelect.innerHTML = '';
+            categories[type].forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                categorieSelect.appendChild(option);
+            });
+            afficherCategories();
+            updateBudgetCategorieSelect();
+        }
+
+        function updateBudgetCategorieSelect() {
+            const budgetCategorieSelect = document.getElementById('budgetCategorie');
+            budgetCategorieSelect.innerHTML = '<option value="">Sélectionner une catégorie</option>';
+            categories.depense.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                budgetCategorieSelect.appendChild(option);
+            });
+        }
+
+        function rafraichirSoldeInitialUI() {
+            const affichage = document.getElementById('soldeInitialAffichage');
+            if (affichage) {
+                affichage.textContent = `${soldeInitial.toFixed(2)} €`;
+            }
+        }
+
+        function definirSoldeInitial() {
+            const input = document.getElementById('soldeInitialInput');
+            if (!input) return;
+            const valeurSaisie = input.value.replace(',', '.');
+            const montant = parseFloat(valeurSaisie);
+            if (isNaN(montant)) {
+                alert('Veuillez saisir un montant numérique valide.');
+                return;
+            }
+            soldeInitial = montant;
+            input.value = soldeInitial.toFixed(2);
+            rafraichirSoldeInitialUI();
+            updateDashboard();
+            alert(`✅ Solde initial mis à jour : ${soldeInitial.toFixed(2)} €`);
+        }
+
+        function definirBudget() {
+            const categorie = document.getElementById('budgetCategorie').value;
+            const montant = parseFloat(document.getElementById('budgetMontant').value);
+
+            if (!categorie) {
+                alert('Veuillez sélectionner une catégorie');
+                return;
+            }
+
+            if (!montant || montant <= 0) {
+                alert('Veuillez entrer un montant valide');
+                return;
+            }
+
+            budgets[categorie] = montant;
+            document.getElementById('budgetMontant').value = '';
+            document.getElementById('budgetCategorie').value = '';
+            afficherBudgets();
+            alert(`✅ Budget de ${montant.toFixed(2)}€/mois défini pour "${categorie}"`);
+        }
+
+        function supprimerBudget(categorie) {
+            if (confirm(`Voulez-vous supprimer le budget pour "${categorie}" ?`)) {
+                delete budgets[categorie];
+                afficherBudgets();
+            }
+        }
+
+        function calculerDepensesCategorie(categorie, mois = null, annee = null) {
+            const now = new Date();
+            const moisActuel = mois !== null ? mois : now.getMonth();
+            const anneeActuelle = annee !== null ? annee : now.getFullYear();
+
+            return transactions
+                .filter(t => {
+                    if (t.type !== 'depense' || t.categorie !== categorie) return false;
+                    const date = new Date(t.date);
+                    return date.getMonth() === moisActuel && date.getFullYear() === anneeActuelle;
+                })
+                .reduce((sum, t) => sum + t.montant, 0);
+        }
+
+        function afficherBudgets() {
+            const container = document.getElementById('tableBudgets');
+            
+            if (Object.keys(budgets).length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-4">Aucun budget défini. Commencez par définir un budget pour une catégorie.</p>';
+                return;
+            }
+
+            let html = '<div class="space-y-4">';
+            
+            let totalBudget = 0;
+            let totalDepense = 0;
+
+            for (const [categorie, budget] of Object.entries(budgets)) {
+                const depense = calculerDepensesCategorie(categorie);
+                const reste = budget - depense;
+                const pourcentage = (depense / budget) * 100;
+                
+                totalBudget += budget;
+                totalDepense += depense;
+
+                let couleurBarre = 'bg-green-500';
+                let couleurTexte = 'text-green-700';
+                let statut = '✅ Dans le budget';
+
+                if (pourcentage >= 100) {
+                    couleurBarre = 'bg-red-500';
+                    couleurTexte = 'text-red-700';
+                    statut = '❌ Dépassé !';
+                } else if (pourcentage >= 90) {
+                    couleurBarre = 'bg-orange-500';
+                    couleurTexte = 'text-orange-700';
+                    statut = '⚠️ Attention';
+                } else if (pourcentage >= 70) {
+                    couleurBarre = 'bg-yellow-500';
+                    couleurTexte = 'text-yellow-700';
+                    statut = '💡 Surveiller';
+                }
+
+                html += `
+                    <div class="border rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <h4 class="font-semibold text-lg">${categorie}</h4>
+                                <p class="text-sm text-gray-600">Budget mensuel: ${budget.toFixed(2)}€</p>
+                            </div>
+                            <button onclick="supprimerBudget('${categorie}')" class="text-red-600 hover:text-red-800">🗑️</button>
+                        </div>
+                        
+                        <div class="mb-2">
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="${couleurTexte} font-medium">${statut}</span>
+                                <span class="font-bold">${pourcentage.toFixed(1)}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-4">
+                                <div class="${couleurBarre} h-4 rounded-full transition-all" style="width: ${Math.min(pourcentage, 100)}%"></div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2 text-sm mt-3">
+                            <div class="text-center p-2 bg-gray-50 rounded">
+                                <p class="text-gray-600">Dépensé</p>
+                                <p class="font-bold text-red-600">${depense.toFixed(2)}€</p>
+                            </div>
+                            <div class="text-center p-2 bg-gray-50 rounded">
+                                <p class="text-gray-600">Restant</p>
+                                <p class="font-bold ${reste >= 0 ? 'text-green-600' : 'text-red-600'}">${reste.toFixed(2)}€</p>
+                            </div>
+                            <div class="text-center p-2 bg-gray-50 rounded">
+                                <p class="text-gray-600">Budget</p>
+                                <p class="font-bold text-blue-600">${budget.toFixed(2)}€</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Résumé global
+            const resteGlobal = totalBudget - totalDepense;
+            const pourcentageGlobal = totalBudget > 0 ? (totalDepense / totalBudget) * 100 : 0;
+
+            html += `
+                <div class="border-2 border-blue-500 rounded-lg p-4 bg-blue-50">
+                    <h4 class="font-bold text-lg mb-3">📊 Résumé Global</h4>
+                    <div class="grid grid-cols-4 gap-2 text-sm">
+                        <div class="text-center p-2 bg-white rounded">
+                            <p class="text-gray-600">Budget Total</p>
+                            <p class="font-bold text-blue-600">${totalBudget.toFixed(2)}€</p>
+                        </div>
+                        <div class="text-center p-2 bg-white rounded">
+                            <p class="text-gray-600">Dépensé</p>
+                            <p class="font-bold text-red-600">${totalDepense.toFixed(2)}€</p>
+                        </div>
+                        <div class="text-center p-2 bg-white rounded">
+                            <p class="text-gray-600">Restant</p>
+                            <p class="font-bold ${resteGlobal >= 0 ? 'text-green-600' : 'text-red-600'}">${resteGlobal.toFixed(2)}€</p>
+                        </div>
+                        <div class="text-center p-2 bg-white rounded">
+                            <p class="text-gray-600">Utilisation</p>
+                            <p class="font-bold">${pourcentageGlobal.toFixed(1)}%</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function afficherCategories() {
+            const rendreLigne = (type, cat, container, estDefaut) => {
+                const row = document.createElement('div');
+                row.className = 'flex items-center justify-between bg-gray-50 px-3 py-2 rounded';
+
+                const label = document.createElement('span');
+                label.className = 'text-sm truncate';
+                label.textContent = cat;
+
+                const actions = document.createElement('div');
+                actions.className = 'flex items-center gap-2';
+
+                const btnEdit = document.createElement('button');
+                btnEdit.className = 'text-blue-600 hover:text-blue-800 text-sm';
+                btnEdit.textContent = '✏️';
+                btnEdit.title = 'Renommer la catégorie';
+                btnEdit.onclick = () => renommerCategorie(type, cat);
+                actions.appendChild(btnEdit);
+
+                if (estDefaut) {
+                    const badge = document.createElement('span');
+                    badge.className = 'text-gray-400 text-xs';
+                    badge.textContent = 'Défaut';
+                    actions.appendChild(badge);
+                } else {
+                    const btnDelete = document.createElement('button');
+                    btnDelete.className = 'text-red-600 hover:text-red-800 text-sm';
+                    btnDelete.textContent = '🗑️';
+                    btnDelete.title = 'Supprimer la catégorie';
+                    btnDelete.onclick = () => supprimerCategorie(type, cat);
+                    actions.appendChild(btnDelete);
+                }
+
+                row.appendChild(label);
+                row.appendChild(actions);
+                container.appendChild(row);
+            };
+
+            const listeDepense = document.getElementById('listeCategoriesDepense');
+            listeDepense.innerHTML = '';
+            categories.depense.forEach(cat => rendreLigne('depense', cat, listeDepense, categoriesDefaut.depense.includes(cat)));
+
+            const listeRevenu = document.getElementById('listeCategoriesRevenu');
+            listeRevenu.innerHTML = '';
+            categories.revenu.forEach(cat => rendreLigne('revenu', cat, listeRevenu, categoriesDefaut.revenu.includes(cat)));
+        }
+
+        function ajouterCategorie(type) {
+            const inputId = type === 'depense' ? 'nouvelleCategorieDepense' : 'nouvelleCategorieRevenu';
+            const nouvelleCategorie = document.getElementById(inputId).value.trim();
+            
+            if (!nouvelleCategorie) {
+                alert('Veuillez entrer un nom de catégorie');
+                return;
+            }
+            
+            if (categories[type].includes(nouvelleCategorie)) {
+                alert('Cette catégorie existe déjà');
+                return;
+            }
+            
+            categories[type].push(nouvelleCategorie);
+            document.getElementById(inputId).value = '';
+            updateCategories();
+            updateDashboard();
+        }
+
+        function renommerCategorie(type, categorie) {
+            const proposition = prompt('Nouveau nom pour la catégorie :', categorie);
+            if (proposition === null) return;
+            const nouveauNom = proposition.trim();
+            if (!nouveauNom) {
+                alert('Le nom de la catégorie ne peut pas être vide.');
+                return;
+            }
+            if (nouveauNom === categorie) {
+                return;
+            }
+            const existe = categories[type].some(cat => cat.toLowerCase() === nouveauNom.toLowerCase());
+            if (existe) {
+                alert('Cette catégorie existe déjà.');
+                return;
+            }
+
+            const categorieSelectVal = document.getElementById('categorie').value;
+            const budgetSelectVal = document.getElementById('budgetCategorie').value;
+
+            categories[type] = categories[type].map(cat => cat === categorie ? nouveauNom : cat);
+
+            transactions.forEach(t => {
+                if (t.type === type && t.categorie === categorie) {
+                    t.categorie = nouveauNom;
+                }
+            });
+
+            if (type === 'depense' && budgets.hasOwnProperty(categorie)) {
+                budgets[nouveauNom] = budgets[categorie];
+                delete budgets[categorie];
+            }
+
+            updateCategories();
+            if (categorieSelectVal === categorie) {
+                document.getElementById('categorie').value = nouveauNom;
+            }
+            if (budgetSelectVal === categorie) {
+                document.getElementById('budgetCategorie').value = nouveauNom;
+            }
+            updateDashboard();
+            alert(`✅ Catégorie renommée en "${nouveauNom}"`);
+        }
+
+        function supprimerCategorie(type, categorie) {
+            if (confirm(`Voulez-vous vraiment supprimer la catégorie "${categorie}" ?`)) {
+                const categorieFallback = 'Autre';
+
+                transactions.forEach(t => {
+                    if (t.type === type && t.categorie === categorie) {
+                        t.categorie = categorieFallback;
+                    }
+                });
+
+                if (type === 'depense' && budgets.hasOwnProperty(categorie)) {
+                    delete budgets[categorie];
+                }
+
+                categories[type] = categories[type].filter(c => c !== categorie);
+                if (!categories[type].includes(categorieFallback)) {
+                    categories[type].push(categorieFallback);
+                }
+
+                updateCategories();
+                updateDashboard();
+                alert(`✅ Catégorie "${categorie}" supprimée. Les éléments associés ont été déplacés dans "${categorieFallback}".`);
+            }
+        }
+
+        function ajouterTransaction() {
+            const type = document.getElementById('type').value;
+            const montant = parseFloat(document.getElementById('montant').value);
+            const categorie = document.getElementById('categorie').value;
+            const description = document.getElementById('description').value;
+
+            if (montant && description) {
+                transactions.push({
+                    id: Date.now(),
+                    type,
+                    montant,
+                    categorie,
+                    date: new Date().toISOString().split('T')[0],
+                    description
+                });
+                document.getElementById('montant').value = '';
+                document.getElementById('description').value = '';
+                updateDashboard();
+            }
+        }
+
+        function changerCategorie(id, nouvelleCategorie) {
+            const transaction = transactions.find(t => t.id === id);
+            if (transaction) {
+                transaction.categorie = nouvelleCategorie;
+                updateDashboard();
+            }
+        }
+
+        function supprimerTransaction(id) {
+            if (confirm('Voulez-vous vraiment supprimer cette transaction ?')) {
+                transactions = transactions.filter(t => t.id !== id);
+                updateDashboard();
+            }
+        }
+
+        function updateDashboard() {
+            const totalRevenus = transactions.filter(t => t.type === 'revenu').reduce((sum, t) => sum + t.montant, 0);
+            const totalDepenses = transactions.filter(t => t.type === 'depense').reduce((sum, t) => sum + t.montant, 0);
+            const solde = soldeInitial + totalRevenus - totalDepenses;
+
+            document.getElementById('totalRevenus').textContent = totalRevenus.toFixed(2) + ' €';
+            document.getElementById('totalDepenses').textContent = totalDepenses.toFixed(2) + ' €';
+            document.getElementById('solde').textContent = solde.toFixed(2) + ' €';
+            document.getElementById('solde').className = `text-3xl font-bold ${solde >= 0 ? 'text-blue-600' : 'text-orange-600'}`;
+            rafraichirSoldeInitialUI();
+
+            updateTransactionsList();
+            updateCharts();
+            afficherBudgets();
+        }
+
+        function updateTransactionsList() {
+            const tbody = document.getElementById('transactionsList');
+            tbody.innerHTML = '';
+            [...transactions].reverse().forEach(t => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b hover:bg-gray-50';
+                
+                // Créer le select pour la catégorie
+                const categorieOptions = categories[t.type].map(cat => 
+                    `<option value="${cat}" ${cat === t.categorie ? 'selected' : ''}>${cat}</option>`
+                ).join('');
+                
+                tr.innerHTML = `
+                    <td class="py-3 px-4">${new Date(t.date).toLocaleDateString('fr-FR')}</td>
+                    <td class="py-3 px-4">
+                        <span class="px-2 py-1 rounded text-sm ${t.type === 'revenu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${t.type === 'revenu' ? 'Revenu' : 'Dépense'}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4">
+                        <select onchange="changerCategorie(${t.id}, this.value)" class="px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
+                            ${categorieOptions}
+                        </select>
+                    </td>
+                    <td class="py-3 px-4">${t.description}</td>
+                    <td class="py-3 px-4 text-right font-semibold ${t.type === 'revenu' ? 'text-green-600' : 'text-red-600'}">
+                        ${t.type === 'revenu' ? '+' : '-'}${t.montant.toFixed(2)} €
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        <button onclick="supprimerTransaction(${t.id})" class="text-red-600 hover:text-red-800 font-bold">🗑️</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateCharts() {
+            const depensesParCategorie = {};
+            categories.depense.forEach(cat => {
+                const total = transactions.filter(t => t.type === 'depense' && t.categorie === cat).reduce((sum, t) => sum + t.montant, 0);
+                if (total > 0) depensesParCategorie[cat] = total;
+            });
+
+            if (pieChart) pieChart.destroy();
+            const pieCtx = document.getElementById('pieChart').getContext('2d');
+            pieChart = new Chart(pieCtx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(depensesParCategorie),
+                    datasets: [{
+                        data: Object.values(depensesParCategorie),
+                        backgroundColor: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: true }
+            });
+
+            const evolutionData = Array.from({length: 12}, (_, i) => {
+                const mois = i + 1;
+                const revenus = transactions.filter(t => t.type === 'revenu' && new Date(t.date).getMonth() + 1 === mois).reduce((sum, t) => sum + t.montant, 0);
+                const depenses = transactions.filter(t => t.type === 'depense' && new Date(t.date).getMonth() + 1 === mois).reduce((sum, t) => sum + t.montant, 0);
+                return { revenus, depenses, solde: revenus - depenses };
+            });
+
+            if (lineChart) lineChart.destroy();
+            const lineCtx = document.getElementById('lineChart').getContext('2d');
+            lineChart = new Chart(lineCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'],
+                    datasets: [
+                        { label: 'Revenus', data: evolutionData.map(d => d.revenus), borderColor: '#10b981', tension: 0.1 },
+                        { label: 'Dépenses', data: evolutionData.map(d => d.depenses), borderColor: '#ef4444', tension: 0.1 },
+                        { label: 'Solde', data: evolutionData.map(d => d.solde), borderColor: '#3b82f6', tension: 0.1 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: true }
+            });
+        }
+
+        document.getElementById('type').addEventListener('change', updateCategories);
+        
+        document.getElementById('sauvegardeFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        const sauvegarde = JSON.parse(event.target.result);
+                        
+                        if (!sauvegarde.version || !sauvegarde.transactions) {
+                            alert('❌ Fichier de sauvegarde invalide');
+                            return;
+                        }
+
+                        // Confirmation avant restauration
+                        const nbTransactions = sauvegarde.transactions.length;
+                        const nbBudgets = Object.keys(sauvegarde.budgets || {}).length;
+                        const soldeRestauré = typeof sauvegarde.soldeInitial === 'number' ? sauvegarde.soldeInitial : parseFloat(sauvegarde.soldeInitial || '0');
+                        const nbCategories = (sauvegarde.categoriesPersonnalisees?.depense?.length || 0) + 
+                                           (sauvegarde.categoriesPersonnalisees?.revenu?.length || 0);
+
+                        if (confirm(`📂 Restaurer la sauvegarde ?\n\nContenu :\n- ${nbTransactions} transactions\n- ${nbBudgets} budgets\n- ${nbCategories} catégories personnalisées\n- Solde initial : ${isNaN(soldeRestauré) ? '0.00' : soldeRestauré.toFixed(2)} €\n\n⚠️ Les données actuelles seront remplacées !`)) {
+                            // Restaurer les transactions
+                            transactions = sauvegarde.transactions;
+
+                            // Restaurer les budgets
+                            budgets = sauvegarde.budgets || {};
+
+                            // Restaurer les catégories personnalisées
+                            if (sauvegarde.categoriesPersonnalisees) {
+                                categories.depense = [...categoriesDefaut.depense, ...(sauvegarde.categoriesPersonnalisees.depense || [])];
+                                categories.revenu = [...categoriesDefaut.revenu, ...(sauvegarde.categoriesPersonnalisees.revenu || [])];
+                            }
+
+                            soldeInitial = isNaN(soldeRestauré) ? 0 : soldeRestauré;
+                            const soldeInput = document.getElementById('soldeInitialInput');
+                            if (soldeInput) {
+                                soldeInput.value = soldeInitial.toFixed(2);
+                            }
+
+                            updateCategories();
+                            updateDashboard();
+                            
+                            alert(`✅ Sauvegarde restaurée avec succès !\n\n- ${nbTransactions} transactions importées\n- ${nbBudgets} budgets restaurés\n- ${nbCategories} catégories ajoutées\n- Solde initial : ${soldeInitial.toFixed(2)} €`);
+                        }
+                    } catch (error) {
+                        alert('❌ Erreur lors de la lecture du fichier : ' + error.message);
+                    }
+                };
+                reader.onerror = function() {
+                    alert('❌ Erreur lors de la lecture du fichier');
+                };
+                reader.readAsText(file);
+            }
+        });
+        
+        function detecterColonne(headers, motsClés) {
+            const headersLower = headers.map(h => h.toLowerCase().trim());
+            for (let motClé of motsClés) {
+                const index = headersLower.findIndex(h => h.includes(motClé.toLowerCase()));
+                if (index !== -1) return headers[index];
+            }
+            return null;
+        }
+        
+        document.getElementById('csvFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    Papa.parse(event.target.result, {
+                        header: true,
+                        dynamicTyping: true,
+                        skipEmptyLines: true,
+                        complete: function(results) {
+                            const headers = results.meta.fields;
+                            
+                            // Détection automatique des colonnes
+                            const colonneType = detecterColonne(headers, ['type', 'opération', 'operation', 'transaction']);
+                            const colonneMontant = detecterColonne(headers, ['montant', 'amount', 'somme', 'valeur', 'prix', 'total', 'débit', 'crédit']);
+                            const colonneCategorie = detecterColonne(headers, ['categorie', 'catégorie', 'category', 'libellé', 'libelle', 'label']);
+                            const colonneDate = detecterColonne(headers, ['date', 'jour', 'day']);
+                            const colonneDescription = detecterColonne(headers, ['description', 'desc', 'note', 'commentaire', 'détail', 'detail', 'libellé']);
+                            
+                            console.log('Colonnes détectées:', {
+                                type: colonneType,
+                                montant: colonneMontant,
+                                categorie: colonneCategorie,
+                                date: colonneDate,
+                                description: colonneDescription
+                            });
+                            
+                            if (!colonneMontant) {
+                                alert('❌ Impossible de trouver une colonne de montant. Colonnes disponibles: ' + headers.join(', '));
+                                return;
+                            }
+                            
+                            const newTransactions = results.data.map((row, i) => {
+                                let montant = parseFloat(row[colonneMontant]);
+                                if (isNaN(montant)) return null;
+                                
+                                // Détection du type
+                                let type = 'depense';
+                                if (colonneType) {
+                                    const typeValue = String(row[colonneType]).toLowerCase();
+                                    if (typeValue.includes('revenu') || typeValue.includes('credit') || typeValue.includes('crédit') || typeValue.includes('income') || typeValue.includes('entrée')) {
+                                        type = 'revenu';
+                                    }
+                                } else {
+                                    // Si pas de colonne type, détecter selon le signe du montant
+                                    if (montant > 0) type = 'revenu';
+                                    else if (montant < 0) {
+                                        type = 'depense';
+                                        montant = Math.abs(montant);
+                                    }
+                                }
+                                
+                                // Récupération des autres données
+                                const categorie = colonneCategorie ? (row[colonneCategorie] || 'Autre') : 'Autre';
+                                const date = colonneDate ? row[colonneDate] : new Date().toISOString().split('T')[0];
+                                const description = colonneDescription ? (row[colonneDescription] || '') : 
+                                                   (colonneCategorie ? (row[colonneCategorie] || '') : '');
+                                
+                                // Ajouter automatiquement la catégorie si elle n'existe pas
+                                if (categorie && !categories[type].includes(categorie)) {
+                                    categories[type].push(categorie);
+                                }
+                                
+                                return {
+                                    id: Date.now() + i,
+                                    type,
+                                    montant: Math.abs(montant),
+                                    categorie,
+                                    date,
+                                    description
+                                };
+                            }).filter(t => t !== null && t.montant > 0);
+                            
+                            if (newTransactions.length > 0) {
+                                transactions.push(...newTransactions);
+                                updateDashboard();
+                                alert(`✅ ${newTransactions.length} transactions importées avec succès !\n\nColonnes utilisées:\n- Montant: ${colonneMontant}\n- Type: ${colonneType || 'détecté automatiquement'}\n- Catégorie: ${colonneCategorie || 'Autre par défaut'}\n- Date: ${colonneDate || 'date du jour'}\n- Description: ${colonneDescription || 'depuis catégorie'}`);
+                            } else {
+                                alert('❌ Aucune transaction valide trouvée dans le fichier CSV');
+                            }
+                        },
+                        error: function(error) {
+                            alert(`❌ Erreur lors de l'import: ${error.message}`);
+                        }
+                    });
+                };
+                reader.onerror = function() {
+                    alert('❌ Erreur lors de la lecture du fichier');
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        function exporterTransactionsCSV() {
+            const csv = Papa.unparse(transactions.map(t => ({
+                type: t.type,
+                montant: t.montant,
+                categorie: t.categorie,
+                date: t.date,
+                description: t.description
+            })));
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `transactions_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+        }
+
+        function exporterSauvegardeComplete() {
+            const sauvegarde = {
+                version: '1.0',
+                date: new Date().toISOString(),
+                transactions: transactions,
+                budgets: budgets,
+                soldeInitial: soldeInitial,
+                categoriesPersonnalisees: {
+                    depense: categories.depense.filter(c => !categoriesDefaut.depense.includes(c)),
+                    revenu: categories.revenu.filter(c => !categoriesDefaut.revenu.includes(c))
+                }
+            };
+
+            const json = JSON.stringify(sauvegarde, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `budget_sauvegarde_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            
+            alert('✅ Sauvegarde complète créée !\n\nContenu :\n- ' + transactions.length + ' transactions\n- ' + Object.keys(budgets).length + ' budgets\n- ' + (sauvegarde.categoriesPersonnalisees.depense.length + sauvegarde.categoriesPersonnalisees.revenu.length) + ' catégories personnalisées\n- Solde initial : ' + soldeInitial.toFixed(2) + ' €');
+        }
+
+        function reinitialiser() {
+            if (confirm('⚠️ ATTENTION : Voulez-vous vraiment supprimer TOUTES les données ?\n\n- Transactions\n- Budgets\n- Catégories personnalisées\n- Solde initial\n\nCette action est irréversible !')) {
+                if (confirm('Êtes-vous absolument sûr ? Pensez à exporter une sauvegarde avant.')) {
+                    transactions = [];
+                    budgets = {};
+                    categories = {
+                        depense: [...categoriesDefaut.depense],
+                        revenu: [...categoriesDefaut.revenu]
+                    };
+                    soldeInitial = 0;
+                    const soldeInput = document.getElementById('soldeInitialInput');
+                    if (soldeInput) {
+                        soldeInput.value = soldeInitial.toFixed(2);
+                    }
+                    updateCategories();
+                    updateDashboard();
+                    alert('✅ Ensemble des données réinitialisé.');
+                }
+            }
+        }
+
+        const soldeInitialInput = document.getElementById('soldeInitialInput');
+        if (soldeInitialInput) {
+            soldeInitialInput.value = soldeInitial.toFixed(2);
+        }
+
+        updateCategories();
+        updateDashboard();
+        afficherCategories();
+        afficherBudgets();
+    </script>
+</body>
+</html>
